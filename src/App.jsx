@@ -31,7 +31,7 @@ const spendData = [
 const palette = ['#641d36', '#e7a9c0', '#d7c2ca'];
 const money = n => '$' + Number(n).toLocaleString('en-US');
 
-function App() {
+function AdminDashboard({ onBackToWebsite }) {
   const [page, setPage] = useState('Overview');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [projects, setProjects] = useState(initialProjects);
@@ -43,6 +43,10 @@ function App() {
   const [toast, setToast] = useState('');
   const [demoUser, setDemoUser] = useState({ name: 'Sawaira Ijaz', role: 'Administrator' });
   const [loggedIn, setLoggedIn] = useState(true);
+  const [loginEmail, setLoginEmail] = useState('admin@kashifconstructions.com');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
   const [projectForm, setProjectForm] = useState({ name: '', client: '', location: '', budget: '' });
   const [clientForm, setClientForm] = useState({ name: '', company: '', email: '', phone: '' });
   const [filter, setFilter] = useState('All');
@@ -67,9 +71,21 @@ function App() {
     setClients([{ ...clientForm, id: Date.now(), projects: 0 }, ...clients]); setShowClient(false); setClientForm({ name: '', company: '', email: '', phone: '' }); notify('Client added successfully.');
   };
   const removeProject = id => { setProjects(projects.filter(p => p.id !== id)); notify('Project removed from demo data.'); };
+  const signIn = async e => {
+    e.preventDefault(); setLoginError(''); setLoginLoading(true);
+    try {
+      const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: loginEmail, password: loginPassword }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Unable to sign in.');
+      localStorage.setItem('kc_token', data.token);
+      setDemoUser({ name: data.user.name, role: data.user.role === 'admin' ? 'Administrator' : 'Team member' });
+      setLoggedIn(true);
+    } catch (err) { setLoginError(err.message || 'API unavailable. Use demo preview to explore the interface.'); }
+    finally { setLoginLoading(false); }
+  };
   const completeTask = id => setTasks(tasks.map(t => t.id === id ? { ...t, status: 'Completed' } : t));
 
-  if (!loggedIn) return <div className="login-screen"><div className="login-card"><div className="brand-mark"><HardHat size={25}/></div><p className="eyebrow">KASHIF CONSTRUCTIONS</p><h1>Welcome back.</h1><p className="muted">Sign in to your business workspace.</p><label>Email address</label><input defaultValue="admin@kashifconstructions.com" type="email"/><label>Password</label><input defaultValue="demo-password" type="password"/><button className="primary wide" onClick={() => setLoggedIn(true)}>Sign in to workspace</button><small>Demo preview · Authentication API is available after deployment configuration.</small></div></div>;
+  if (!loggedIn) return <div className="login-screen"><form className="login-card" onSubmit={signIn}><div className="brand-mark"><HardHat size={25}/></div><p className="eyebrow">KASHIF CONSTRUCTIONS</p><h1>Welcome back.</h1><p className="muted">Sign in to your business workspace.</p><label>Email address</label><input required value={loginEmail} onChange={e=>setLoginEmail(e.target.value)} type="email"/><label>Password</label><input required value={loginPassword} onChange={e=>setLoginPassword(e.target.value)} type="password" minLength={8}/>{loginError&&<p className="login-error">{loginError}</p>}<button className="primary wide" disabled={loginLoading}>{loginLoading?'Signing in…':'Sign in to workspace'}</button><button type="button" className="secondary wide" onClick={()=>{setDemoUser({name:'Sawaira Ijaz',role:'Administrator'});setLoggedIn(true);}}>Continue with demo preview</button><small>For real authentication, register an account through POST /api/auth/register after deployment setup.</small></form></div>;
 
   return <div className="app-shell">
     <aside className={`sidebar ${mobileOpen ? 'open' : ''}`}>
@@ -80,7 +96,7 @@ function App() {
     </aside>
     {mobileOpen && <div className="scrim" onClick={() => setMobileOpen(false)}></div>}
     <main className="main-area">
-      <header className="topbar"><button className="menu-toggle" onClick={() => setMobileOpen(true)}><Menu/></button><div className="breadcrumb">Workspace <span>/</span> <b>{page}</b></div><div className="top-actions"><div className="searchbox"><Search size={16}/><input placeholder="Search anything..." value={query} onChange={e=>setQuery(e.target.value)}/><kbd>⌘ K</kbd></div><button className="icon-btn notification" onClick={()=>notify('You are all caught up.')}><Bell size={18}/><i></i></button><div className="top-avatar">SI</div></div></header>
+      <header className="topbar"><button className="site-return" onClick={onBackToWebsite}>← Company website</button><button className="menu-toggle" onClick={() => setMobileOpen(true)}><Menu/></button><div className="breadcrumb">Workspace <span>/</span> <b>{page}</b></div><div className="top-actions"><div className="searchbox"><Search size={16}/><input placeholder="Search anything..." value={query} onChange={e=>setQuery(e.target.value)}/><kbd>⌘ K</kbd></div><button className="icon-btn notification" onClick={()=>notify('You are all caught up.')}><Bell size={18}/><i></i></button><div className="top-avatar">SI</div></div></header>
       <div className="content">
         {page === 'Overview' && <Overview projects={projects} tasks={tasks} clients={clients} onNavigate={setPage} onAdd={()=>setShowProject(true)} />}
         {page === 'Projects' && <section><div className="page-heading"><div><p className="eyebrow">PROJECT CONTROL</p><h1>Projects <span className="count-pill">{projects.length}</span></h1><p className="muted">Track delivery, budgets and project milestones.</p></div><button className="primary" onClick={()=>setShowProject(true)}><Plus size={17}/> New project</button></div><div className="toolbar"><div className="filter-tabs">{['All','In Progress','Planning','Completed'].map(s=><button className={filter===s?'selected':''} onClick={()=>setFilter(s)} key={s}>{s}</button>)}</div><span className="muted small">{filteredProjects.length} projects shown</span></div><div className="project-grid">{filteredProjects.map(p=><ProjectCard key={p.id} p={p} onDelete={()=>removeProject(p.id)}/>)}</div>{filteredProjects.length===0&&<Empty title="No matching projects" text="Try another search or filter."/>}</section>}
@@ -112,4 +128,58 @@ function SpendChart() { return <div className="chart"><ResponsiveContainer width
 function ProjectCard({p,onDelete}) { return <div className="project-card"><div className="project-card-top"><div className="project-icon large"><Building2 size={20}/></div><button className="dots" onClick={onDelete} title="Remove from demo"><MoreHorizontal/></button></div><div className="project-title"><h3>{p.name}</h3><Status status={p.status}/></div><p className="muted"><Users size={14}/>{p.client}</p><p className="muted"><MapPin size={14}/>{p.location}</p><div className="project-progress-label"><span>Project completion</span><b>{p.progress}%</b></div><div className="progress-track"><i style={{width:p.progress+'%'}}></i></div><div className="project-meta"><div><span>Budget</span><b>{money(p.budget)}</b></div><div><span>Spent</span><b>{money(p.spent)}</b></div></div><div className="project-due"><CalendarDays size={14}/>Due {p.due}</div></div>; }
 function Modal({title,close,children}) { return <div className="modal-backdrop" onMouseDown={close}><div className="modal" onMouseDown={e=>e.stopPropagation()}><div className="modal-head"><h2>{title}</h2><button className="icon-btn" onClick={close}><X size={19}/></button></div>{children}</div></div>; }
 function Empty({title,text}) { return <div className="empty"><Building2 size={28}/><b>{title}</b><span>{text}</span></div>; }
-export default App;
+
+function PublicWebsite({ onOpenAdmin }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [faqOpen, setFaqOpen] = useState(0);
+  const [sent, setSent] = useState(false);
+  const faqs = [
+    ['What types of construction projects do you handle?', 'We support residential, commercial, renovation and construction management projects. Share your scope with our team so we can discuss the right delivery approach.'],
+    ['Can I request an initial project consultation?', 'Yes. Use the consultation form below to share your project type, location and preferred contact details. Our team can review the requirements and discuss next steps.'],
+    ['How do you manage project timelines and budgets?', 'Our project workflow is built around clear milestones, progress reviews, budget visibility and regular communication with clients.'],
+    ['Do you provide renovation and interior finishing?', 'Yes. Renovation, fit-out coordination and finishing work can be discussed as part of a tailored project scope.'],
+    ['Can I track an ongoing project?', 'The company workspace includes project tracking tools for authorized team members. Client-facing progress updates can also be arranged during project onboarding.']
+  ];
+  const submitInquiry = e => {
+    e.preventDefault();
+    const data = new FormData(e.currentTarget);
+    const subject = encodeURIComponent(`Project inquiry — ${data.get('name')}`);
+    const body = encodeURIComponent(`Name: ${data.get('name')}\nEmail: ${data.get('email')}\nPhone: ${data.get('phone')}\nProject type: ${data.get('type')}\nMessage: ${data.get('message')}`);
+    window.location.href = `mailto:info@kashifconstructions.com?subject=${subject}&body=${body}`;
+    setSent(true);
+  };
+  return <div className="public-site">
+    <div className="announcement"><span>CRAFTING SPACES. BUILDING CONFIDENCE.</span><span>Construction · Renovation · Project Management</span></div>
+    <header className="public-header">
+      <a className="public-brand" href="#home" aria-label="Kashif Constructions home"><span className="public-brand-mark"><HardHat size={25}/></span><span><b>KASHIF</b><small>CONSTRUCTIONS</small></span></a>
+      <button className="public-menu-toggle" onClick={()=>setMenuOpen(!menuOpen)} aria-label="Toggle navigation">{menuOpen?<X/>:<Menu/>}</button>
+      <nav className={menuOpen?'public-nav open':'public-nav'}>
+        {['Home','About','Services','Projects','Process','FAQ','Contact'].map((item,i)=><a key={item} href={'#'+['home','about','services','projects','process','faq','contact'][i]} onClick={()=>setMenuOpen(false)}>{item}</a>)}
+        <button className="nav-admin" onClick={()=>{setMenuOpen(false);onOpenAdmin();}}>Admin Portal <ArrowUpRight size={15}/></button>
+      </nav>
+    </header>
+    <main>
+      <section className="hero" id="home">
+        <div className="hero-image" aria-hidden="true"></div><div className="hero-overlay"></div>
+        <div className="hero-content"><div className="hero-kicker"><span></span> BUILT ON TRUST. DEFINED BY QUALITY.</div><h1>Building your vision.<br/><em>Creating lasting value.</em></h1><p>Thoughtful construction, dependable project delivery and spaces designed around the way you live and work.</p><div className="hero-actions"><a className="btn-light" href="#contact">Discuss your project <ArrowUpRight size={17}/></a><a className="btn-outline-light" href="#projects">Explore our work</a></div><div className="hero-proof"><div><b>01</b><span>Client-first approach</span></div><div><b>02</b><span>Quality-led execution</span></div><div><b>03</b><span>Clear project oversight</span></div></div></div>
+        <div className="hero-stamp"><span>KC</span><small>DESIGN · BUILD · DELIVER</small></div>
+      </section>
+      <section className="trust-strip"><div><b>RESIDENTIAL</b><span>Homes made for living</span></div><i></i><div><b>COMMERCIAL</b><span>Spaces made for business</span></div><i></i><div><b>RENOVATION</b><span>New life for every space</span></div><i></i><div><b>MANAGEMENT</b><span>Projects kept on track</span></div></section>
+      <section className="section about-section" id="about"><div className="section-label">01 / WHO WE ARE</div><div className="about-grid"><div><p className="eyebrow">A BETTER WAY TO BUILD</p><h2>Strong foundations.<br/><em>Stronger relationships.</em></h2></div><div className="about-copy"><p className="lead">At Kashif Constructions, we believe great projects begin with listening, planning and a commitment to doing things properly.</p><p>From the first conversation to the finishing details, our approach brings design intent, practical coordination and careful project oversight together. We aim to make the building experience clear, collaborative and dependable.</p><a className="text-link" href="#contact">Let's talk about your plans <ArrowUpRight size={16}/></a></div></div><div className="about-photo-grid"><div className="about-photo photo-one"><span>01 — THE DETAILS MATTER</span></div><div className="about-photo photo-two"><span>02 — BUILT TO LAST</span></div><div className="about-note"><span className="note-mark">KC.</span><p>Good construction is more than what you see. It is the care, coordination and craft behind every detail.</p></div></div></section>
+      <section className="section services-section" id="services"><div className="section-heading"><div><div className="section-label">02 / WHAT WE DO</div><p className="eyebrow">OUR SERVICES</p><h2>One partner for<br/><em>every stage of the build.</em></h2></div><p>Flexible construction services shaped around your site, your brief and your goals.</p></div><div className="service-grid">
+        {[['01','Residential Construction','From new homes to multi-unit residential developments, planned around comfort, function and lasting quality.','⌂'],['02','Commercial Construction','Practical, professional spaces that support the way your business operates and grows.','▦'],['03','Renovation & Remodeling','Careful upgrades, reconfigurations and refreshes that bring existing spaces back to life.','✳'],['04','Project Management','Coordinated schedules, milestones, communication and oversight from start to handover.','◷'],['05','Interior Finishing','A considered approach to finishes, fixtures and the details that make a space feel complete.','◇'],['06','Planning & Consultation','Early-stage conversations to clarify scope, priorities, feasibility and next steps.','⌖']].map(s=><article className="service-card" key={s[0]}><div className="service-top"><span>{s[0]} / SERVICE</span><b>{s[3]}</b></div><h3>{s[1]}</h3><p>{s[2]}</p><a href="#contact" aria-label={`Ask about ${s[1]}`}><ArrowUpRight size={19}/></a></article>)}
+      </div></section>
+      <section className="feature-band"><div className="feature-image"></div><div className="feature-copy"><div className="section-label">03 / THE KC APPROACH</div><p className="eyebrow">BUILT AROUND YOUR BRIEF</p><h2>Clarity at every<br/><em>step of the journey.</em></h2><p>Construction can feel complex. We focus on clear communication, practical planning and visible progress so you know what is happening and what comes next.</p><ul><li><CheckCircle2 size={17}/> Clear scope and expectations</li><li><CheckCircle2 size={17}/> Milestone-led project coordination</li><li><CheckCircle2 size={17}/> Quality and detail-conscious delivery</li><li><CheckCircle2 size={17}/> Collaborative client communication</li></ul><a className="btn-maroon" href="#process">See how we work <ArrowUpRight size={16}/></a></div></section>
+      <section className="section projects-section" id="projects"><div className="section-heading"><div><div className="section-label">04 / SELECTED WORK</div><p className="eyebrow">PROJECT PORTFOLIO</p><h2>Spaces with purpose.<br/><em>Work with meaning.</em></h2></div><p>A selection of representative project concepts. Contact us to discuss the requirements and scope of your own project.</p></div><div className="portfolio-grid"><article className="portfolio-card portfolio-large"><div className="portfolio-img portfolio-residential"><span>RESIDENTIAL</span></div><div><h3>Rosewood Residences</h3><p>Residential concept · Design & construction</p></div></article><article className="portfolio-card"><div className="portfolio-img portfolio-office"><span>COMMERCIAL</span></div><div><h3>Marlowe Office Spaces</h3><p>Commercial concept · Project coordination</p></div></article><article className="portfolio-card"><div className="portfolio-img portfolio-renovation"><span>RENOVATION</span></div><div><h3>Parkline Renewal</h3><p>Renovation concept · Interior finishing</p></div></article></div><p className="portfolio-disclaimer">Portfolio names and imagery are illustrative presentation concepts, not claims of completed client projects.</p></section>
+      <section className="process-section" id="process"><div className="section-label">05 / HOW WE WORK</div><div className="process-heading"><p className="eyebrow">A CLEARER PROCESS</p><h2>From first idea to<br/><em>final handover.</em></h2></div><div className="process-steps">{[['01','Discover','We learn about your goals, site, priorities and budget.'],['02','Plan','We shape the scope, outline milestones and align expectations.'],['03','Build','Work is coordinated with attention to quality, safety and progress.'],['04','Handover','We review the completed scope and discuss the next steps with you.']].map(x=><div className="process-step" key={x[0]}><b>{x[0]}</b><h3>{x[1]}</h3><p>{x[2]}</p></div>)}</div></section>
+      <section className="faq-section" id="faq"><div className="faq-intro"><div className="section-label">06 / GOOD TO KNOW</div><p className="eyebrow">FREQUENTLY ASKED QUESTIONS</p><h2>Questions before<br/><em>we get started?</em></h2><p>Here are a few helpful answers. If you have a different question, send us a message.</p><a className="text-link" href="#contact">Ask us directly <ArrowUpRight size={16}/></a></div><div className="faq-list">{faqs.map((f,i)=><div className={'faq-item '+(faqOpen===i?'active':'')} key={f[0]}><button onClick={()=>setFaqOpen(faqOpen===i?-1:i)}><span>{f[0]}</span><b>{faqOpen===i?'−':'+'}</b></button>{faqOpen===i&&<p>{f[1]}</p>}</div>)}</div></section>
+      <section className="contact-section" id="contact"><div className="contact-copy"><div className="section-label">07 / START A CONVERSATION</div><p className="eyebrow">TELL US WHAT YOU'RE PLANNING</p><h2>Let's build<br/><em>something meaningful.</em></h2><p>Share a few details about your project. We'll use them to understand your requirements and discuss a suitable next step.</p><div className="contact-detail"><span><Mail size={17}/></span><div><small>EMAIL</small><b>info@kashifconstructions.com</b></div></div><div className="contact-detail"><span><Phone size={17}/></span><div><small>PHONE</small><b>Contact details shared during consultation</b></div></div><div className="contact-detail"><span><MapPin size={17}/></span><div><small>LOCATION</small><b>Serving projects by consultation</b></div></div></div><form className="inquiry-form" onSubmit={submitInquiry}><div className="form-heading"><span>PROJECT INQUIRY</span><small>FIELDS MARKED * ARE REQUIRED</small></div><div className="form-row"><label>Your name *<input name="name" required placeholder="Full name"/></label><label>Email address *<input name="email" type="email" required placeholder="you@example.com"/></label></div><div className="form-row"><label>Phone number<input name="phone" placeholder="Your contact number"/></label><label>Project type<select name="type"><option>Residential construction</option><option>Commercial construction</option><option>Renovation</option><option>Project management</option><option>Interior finishing</option><option>Consultation</option></select></label></div><label>Tell us about your project *<textarea name="message" required rows="4" placeholder="Location, project size, goals and timeline..."></textarea></label><button className="btn-maroon form-submit">Send project inquiry <ArrowUpRight size={17}/></button>{sent&&<p className="form-note">Your email application should open with the inquiry details. If it doesn't, email info@kashifconstructions.com directly.</p>}<small className="privacy-note">Your information is used only to respond to this inquiry.</small></form></section>
+    </main>
+    <footer className="public-footer"><div className="footer-main"><div className="footer-brand"><a className="public-brand" href="#home"><span className="public-brand-mark"><HardHat size={25}/></span><span><b>KASHIF</b><small>CONSTRUCTIONS</small></span></a><p>Thoughtful construction and dependable project coordination, from first conversation to final detail.</p></div><div><b>EXPLORE</b><a href="#about">About us</a><a href="#services">Services</a><a href="#projects">Projects</a><a href="#process">Our process</a></div><div><b>HELP</b><a href="#faq">FAQs</a><a href="#contact">Contact</a><button onClick={onOpenAdmin}>Admin portal</button></div><div><b>GET IN TOUCH</b><a href="mailto:info@kashifconstructions.com">info@kashifconstructions.com</a><a href="#contact">Request a consultation</a></div></div><div className="footer-bottom"><span>© {new Date().getFullYear()} Kashif Constructions. All rights reserved.</span><span>Designed with care · Built with purpose</span></div></footer>
+  </div>;
+}
+
+export default function App() {
+  const [view, setView] = useState('website');
+  return view === 'admin' ? <AdminDashboard onBackToWebsite={() => setView('website')}/> : <PublicWebsite onOpenAdmin={() => {setView('admin'); window.scrollTo({top:0,behavior:'auto'});}}/>;
+}
